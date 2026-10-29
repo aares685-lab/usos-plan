@@ -7,29 +7,12 @@ import os
 from collections import defaultdict
 import re
 
-PLIK_USTAWIEN = "ustawienia.txt"
 PLIK_KALENDARZA = "plan.ics"
 PLIK_POPRZEDNI = "poprzedni_plan.ics"
 PLIK_POWIADOMIEN = "powiadomienia.txt"
 
 aktualny_offset_tygodnia = 0
 tryb_ciemny = True
-
-def wczytaj_zapisany_link():
-    if os.path.exists(PLIK_USTAWIEN):
-        try:
-            with open(PLIK_USTAWIEN, "r", encoding="utf-8") as f:
-                return f.read().strip()
-        except:
-            return ""
-    return ""
-
-def zapisz_link(link):
-    try:
-        with open(PLIK_USTAWIEN, "w", encoding="utf-8") as f:
-            f.write(link)
-    except:
-        pass
 
 def pobierz_i_zapisz_kalendarz(link_ical):
     try:
@@ -129,16 +112,20 @@ def main(page: ft.Page):
     page.title = "Vistula USOS Mobile"
     page.vertical_alignment = "center"
     page.horizontal_alignment = "center"
-    page.window.width = 750
-    page.window.height = 850
     page.bgcolor = "#121212"
+    page.padding = 10
 
     tytul_tygodnia = ft.Text("Tydzień", size=13, weight="bold", color="#64b5f6")
-    
     zawartosc_osi_czasu = ft.Column(spacing=0)
 
-    scrollable_plan = ft.Column(
-        [zawartosc_osi_czasu],
+    # Główny kontener osi czasu z pełnym poziomym i pionowym przewijaniem dla telefonu
+    scrollable_plan = ft.Row(
+        [
+            ft.Column(
+                [zawartosc_osi_czasu],
+                scroll=ft.ScrollMode.AUTO,
+            )
+        ],
         scroll=ft.ScrollMode.AUTO,
         expand=True
     )
@@ -175,11 +162,11 @@ def main(page: ft.Page):
             ft.Row([
                 ft.Text("Szczegóły zajęć", size=18, weight="bold"),
                 ft.ElevatedButton("Powrót", on_click=powrot_do_planu)
-            ], alignment="spaceBetween", width=520),
+            ], alignment="spaceBetween", width=380),
             ft.Container(height=10),
             ft.Container(
                 content=ft.Column(elementy_szczegolow, spacing=6),
-                width=520,
+                width=380,
                 bgcolor="#1e1e1e" if tryb_ciemny else "#fafafa",
                 border_radius=10,
                 padding=20
@@ -247,7 +234,6 @@ def main(page: ft.Page):
                     tekst_na_kafelku = "MS Teams / Online"
                 else:
                     miejsce_str = "Jagiellońska 59, 10-283 Olsztyn"
-                    
                     sala_str = ""
                     szukany_tekst_sali = description + " " + location
                     nawiasy = re.findall(r'\(([0-9]+[a-zA-Z]?)\)', szukany_tekst_sali)
@@ -324,7 +310,7 @@ def main(page: ft.Page):
                             ft.Text(nazwy_dni[i], size=11, weight="bold", color="#64b5f6"),
                             ft.Text(data_dnia.strftime("%d.%m"), size=9, color="#aaaaaa"),
                         ], spacing=1, horizontal_alignment="center"),
-                        width=92,
+                        width=85,
                         padding=6,
                         bgcolor="#1e1e1e" if tryb_ciemny else "#e0e0e0",
                         border_radius=4
@@ -391,7 +377,7 @@ def main(page: ft.Page):
                         ], spacing=2, alignment="spaceBetween", expand=True),
                         top=top_px,
                         left=2,
-                        width=88,
+                        width=81,
                         height=wysokosc_px,
                         bgcolor=kolor_tla_karty,
                         border_radius=5,
@@ -401,8 +387,8 @@ def main(page: ft.Page):
                     stack_kontrola.append(kafelek)
 
                 dzien_stack = ft.Container(
-                    content=ft.Stack(stack_kontrola, width=92, height=WYSOKOSC_OSI),
-                    width=92,
+                    content=ft.Stack(stack_kontrola, width=85, height=WYSOKOSC_OSI),
+                    width=85,
                     height=WYSOKOSC_OSI,
                     clip_behavior=ft.ClipBehavior.NONE
                 )
@@ -427,21 +413,28 @@ def main(page: ft.Page):
         aktualny_offset_tygodnia -= 1
         wczytaj_i_wyswietl_tydzien()
 
-    def przejdź_do_konfiguracji():
+    def wyloguj(e):
+        page.client_storage.remove("usos_link")
+        if os.path.exists(PLIK_KALENDARZA):
+            os.remove(PLIK_KALENDARZA)
         page.clean()
         page.add(ekran_konfiguracji)
         page.update()
 
     def odswiez_plan_klikniety(e):
-        link = wczytaj_zapisany_link()
+        link = page.client_storage.get("usos_link")
         if link:
             sukces = pobierz_i_zapisz_kalendarz(link)
             if sukces or os.path.exists(PLIK_KALENDARZA):
                 wczytaj_i_wyswietl_tydzien()
             else:
-                przejdź_do_konfiguracji()
+                page.clean()
+                page.add(ekran_konfiguracji)
+                page.update()
         else:
-            przejdź_do_konfiguracji()
+            page.clean()
+            page.add(ekran_konfiguracji)
+            page.update()
 
     def przelacz_tryb_graficzny(e):
         global tryb_ciemny
@@ -520,12 +513,12 @@ def main(page: ft.Page):
                 ft.Row([
                     ft.Text("Powiadomienia o zmianach", size=18, weight="bold"),
                     ft.ElevatedButton("Powrót", on_click=powrot_do_planu_z_powiadomien)
-                ], alignment="spaceBetween", width=520),
+                ], alignment="spaceBetween", width=380),
                 ft.Container(height=10),
                 ft.Container(
                     content=powiadomienia_lista,
-                    width=520,
-                    height=520,
+                    width=380,
+                    height=450,
                     bgcolor="#1e1e1e" if tryb_ciemny else "#fafafa",
                     border_radius=10,
                     padding=5
@@ -536,7 +529,7 @@ def main(page: ft.Page):
 
     ical_input = ft.TextField(
         label="Wklej link iCal z USOSweb",
-        width=400,
+        width=330,
         hint_text="https://usosweb.vistula.edu.pl/ical/..."
     )
     info_link = ft.Text("", color="red", size=12)
@@ -547,19 +540,19 @@ def main(page: ft.Page):
             info_link.value = "Najpierw wklej link!"
             page.update()
         else:
-            zapisz_link(link)
+            page.client_storage.set("usos_link", link)
             sukces = pobierz_i_zapisz_kalendarz(link)
             if sukces:
                 page.clean()
                 page.add(ekran_glowny)
                 wczytaj_i_wyswietl_tydzien()
             else:
-                info_link.value = "Błąd pobierania (timeout serwera USOS)"
+                info_link.value = "Błąd pobierania (sprawdź link)"
                 page.update()
 
     ekran_konfiguracji = ft.Column([
-        ft.Text("Vistula USOS - Konfiguracja", size=20, weight="bold"),
-        ft.Text("Wklej swój link iCal:", size=13, color="grey"),
+        ft.Text("Vistula USOS - Konfiguracja", size=18, weight="bold"),
+        ft.Text("Wklej swój link iCal (prywatny):", size=12, color="grey"),
         ft.Container(height=10),
         ical_input,
         info_link,
@@ -570,10 +563,11 @@ def main(page: ft.Page):
     global ekran_glowny
     ekran_glowny = ft.Column([
         ft.Row([
-            ft.ElevatedButton("🔄 Odśwież", on_click=odswiez_plan_klikniety),
-            ft.ElevatedButton("🌙 / ☀️", on_click=przelacz_tryb_graficzny),
-            ft.ElevatedButton("🔔", on_click=otworz_ekran_powiadomien)
-        ], alignment="spaceBetween", width=710),
+            ft.ElevatedButton("🔄", on_click=odswiez_plan_klikniety, tooltip="Odśwież"),
+            ft.ElevatedButton("🌙/☀️", on_click=przelacz_tryb_graficzny),
+            ft.ElevatedButton("🔔", on_click=otworz_ekran_powiadomien),
+            ft.ElevatedButton("🚪 Wyloguj", on_click=wyloguj, color="red")
+        ], alignment="spaceBetween", width=380),
 
         ft.Container(height=5),
 
@@ -581,20 +575,20 @@ def main(page: ft.Page):
             ft.ElevatedButton("◄", on_click=poprzedni_tydzien),
             tytul_tygodnia,
             ft.ElevatedButton("►", on_click=nastepny_tydzien),
-        ], alignment="center", spacing=20, width=710),
+        ], alignment="center", spacing=20, width=380),
 
         ft.Container(height=5),
         
         ft.Container(
             content=scrollable_plan,
-            width=710,
-            expand=True,
+            width=380,
+            height=600,
             border_radius=8,
             padding=5
         )
     ], alignment="center", horizontal_alignment="center", expand=True)
 
-    istniejacy_link = wczytaj_zapisany_link()
+    istniejacy_link = page.client_storage.get("usos_link")
     if istniejacy_link:
         pobierz_i_zapisz_kalendarz(istniejacy_link)
         page.add(ekran_glowny)
