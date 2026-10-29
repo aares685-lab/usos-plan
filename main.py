@@ -7,8 +7,6 @@ import os
 from collections import defaultdict
 import re
 
-PLIK_POWIADOMIEN_BAZA = "powiadomienia"
-
 def pobierz_kalendarz_z_linku(link_ical):
     try:
         ctx = ssl._create_unverified_context()
@@ -25,6 +23,61 @@ def pobierz_kalendarz_z_linku(link_ical):
     except Exception as ex:
         print(f"Błąd pobierania kalendarza: {ex}")
         return None
+
+def porownaj_kalendarze(stara_data, nowa_data):
+    zmiany = []
+    try:
+        stary_cal = Calendar.from_ical(stara_data)
+        nowy_cal = Calendar.from_ical(nowa_data)
+
+        stare_zdarzenia = {}
+        for comp in stary_cal.walk('vevent'):
+            uid = str(comp.get('uid', ''))
+            summary = str(comp.get('summary', ''))
+            dtstart = comp.get('dtstart')
+            location = str(comp.get('location', ''))
+            description = str(comp.get('description', ''))
+            if uid:
+                stare_zdarzenia[uid] = (summary, dtstart.dt if dtstart else None, location, description)
+
+        for comp in nowy_cal.walk('vevent'):
+            uid = str(comp.get('uid', ''))
+            summary = str(comp.get('summary', ''))
+            dtstart = comp.get('dtstart')
+            location = str(comp.get('location', ''))
+            description = str(comp.get('description', ''))
+            
+            nowy_start = dtstart.dt if dtstart else None
+
+            pelny_tekst = (location + " " + description).lower()
+            czy_online = any(x in pelny_tekst for x in ["teams", "zoom", "online", "zdalnie"])
+            tryb_str = "MS Teams / Online" if czy_online else ("Jagiellońska 59, 10-283 Olsztyn" if location.strip() else "Brak")
+
+            if uid in stare_zdarzenia:
+                stary_summary, stary_start, stara_lokalizacja, stary_opis = stare_zdarzenia[uid]
+                stary_pelny = (stara_lokalizacja + " " + stary_opis).lower()
+                stary_online = any(x in stary_pelny for x in ["teams", "zoom", "online", "zdalnie"])
+                stary_tryb = "MS Teams / Online" if stary_online else ("Jagiellońska 59, 10-283 Olsztyn" if stara_lokalizacja.strip() else "Brak")
+
+                roznice = []
+                if stary_summary != summary:
+                    roznice.append(f"Przedmiot: '{stary_summary}' ➔ '{summary}'")
+                if stary_start != nowy_start:
+                    stary_czas = stary_start.strftime('%d.%m %H:%M') if isinstance(stary_start, datetime.datetime) else str(stary_start)
+                    nowy_czas = nowy_start.strftime('%d.%m %H:%M') if isinstance(nowy_czas, datetime.datetime) else str(nowy_czas)
+                    roznice.append(f"Godzina: {stary_czas} ➔ {nowy_czas}")
+                if stary_tryb != tryb_str:
+                    roznice.append(f"Miejsce: {stary_tryb} ➔ {tryb_str}")
+
+                if roznice:
+                    zmiany.append(f"Zmiana w '{summary}': " + " | ".join(roznice))
+            else:
+                czas_nowy = nowy_start.strftime('%d.%m o %H:%M') if isinstance(nowy_start, datetime.datetime) else ""
+                zmiany.append(f"Nowe zajęcia: {summary} ({czas_nowy}) – {tryb_str}")
+    except Exception as e:
+        print(f"Błąd porównywania: {e}")
+    
+    return zmiany
 
 def main(page: ft.Page):
     aktualny_offset_tygodnia = 0
@@ -340,9 +393,16 @@ def main(page: ft.Page):
     def odswiez_plan_klikniety(e):
         link = page.session.get("usos_link")
         if link:
-            cal_data = pobierz_kalendarz_z_linku(link)
-            if cal_data:
-                page.session.set("cal_data", cal_data)
+            nowa_data = pobierz_kalendarz_z_linku(link)
+            if nowa_data:
+                stara_data = page.session.get("cal_data")
+                if stara_data and stara_data != nowa_data:
+                    zmiany = porownaj_kalendarze(stara_data, nowa_data)
+                    if zmiany:
+                        istniejace_pow = page.session.get("powiadomienia", [])
+                        page.session.set("powiadomienia", istniejace_pow + zmiany)
+
+                page.session.set("cal_data", nowa_data)
                 wczytaj_i_wyswietl_tydzien()
             else:
                 page.clean()
@@ -362,20 +422,54 @@ def main(page: ft.Page):
 
     powiadomienia_lista = ft.ListView(expand=True, spacing=10, padding=10)
 
+    def dodaj_testowe_powiadomienie(e):
+        istniejace_pow = page.session.get("powiadomienia", [])
+        istniejace_pow.append("Zmiana testowa: Sala 105 ➔ MS Teams / Online")
+        page.session.set("powiadomienia", istniejace_pow)
+        otworz_ekran_powiadomien(e)
+
+    def wyczysc_powiadomienia(e):
+        page.session.set("powiadomienia", [])
+        otworz_ekran_powiadomien(e)
+
     def otworz_ekran_powiadomien(e):
         powiadomienia_lista.controls.clear()
         powiadomienia_lista.controls.append(
-            ft.Container(
-                content=ft.Column([
-                    ft.Text("✅ Status", weight="bold", color="black", size=13),
-                    ft.Divider(height=1, color="#d0d0d0"),
-                    ft.Text("Wszystkie terminy są aktualne.", size=12, color="grey"),
-                ], spacing=4),
-                padding=10,
-                bgcolor="#f1f8e9",
-                border_radius=8
-            )
+            ft.Row([
+                ft.ElevatedButton("➕ Test", on_click=dodaj_testowe_powiadomienie),
+                ft.ElevatedButton("🗑️ Wyczyść", on_click=wyczysc_powiadomienia)
+            ], alignment="spaceBetween")
         )
+
+        zmiany = page.session.get("powiadomienia", [])
+        if zmiany:
+            for z in zmiany:
+                powiadomienia_lista.controls.append(
+                    ft.Container(
+                        content=ft.Column([
+                            ft.Text("🔔 Zmiana w planie!", weight="bold", color="black", size=13),
+                            ft.Divider(height=1, color="#d0e1fd"),
+                            ft.Text(z, size=12, color="#333333"),
+                        ], spacing=4),
+                        padding=10,
+                        bgcolor="#e3f2fd",
+                        border_radius=8
+                    )
+                )
+        else:
+            powiadomienia_lista.controls.append(
+                ft.Container(
+                    content=ft.Column([
+                        ft.Text("✅ Brak zmian", weight="bold", color="black", size=13),
+                        ft.Divider(height=1, color="#d0d0d0"),
+                        ft.Text("Wszystkie terminy i sale są aktualne.", size=12, color="grey"),
+                    ], spacing=4),
+                    padding=10,
+                    bgcolor="#f1f8e9",
+                    border_radius=8
+                )
+            )
+
         page.clean()
         page.add(
             ft.Column([
@@ -418,6 +512,7 @@ def main(page: ft.Page):
             if cal_data:
                 page.session.set("usos_link", link)
                 page.session.set("cal_data", cal_data)
+                page.session.set("powiadomienia", [])
                 page.clean()
                 page.add(ekran_glowny)
                 wczytaj_i_wyswietl_tydzien()
