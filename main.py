@@ -390,14 +390,12 @@ def main(page: ft.Page):
     def nastepny_tydzien(e):
         nonlocal aktualny_offset_tygodnia
         aktualny_offset_tygodnia += 1
-        sprawdz_i_odswiez_automatycznie()
-        wczytaj_i_wyswietl_tydzien()
+        wczytaj_i_wyswietl_tydzien() # Brak opóźnienia – zmienia tydzień natychmiastowo!
 
     def poprzedni_tydzien(e):
         nonlocal aktualny_offset_tygodnia
         aktualny_offset_tygodnia -= 1
-        sprawdz_i_odswiez_automatycznie()
-        wczytaj_i_wyswietl_tydzien()
+        wczytaj_i_wyswietl_tydzien() # Brak opóźnienia – zmienia tydzień natychmiastowo!
 
     def wyloguj(e):
         page.session.clear()
@@ -556,7 +554,7 @@ def main(page: ft.Page):
 
     istniejacy_link = page.session.get("usos_link")
     if istniejacy_link and page.session.get("cal_data"):
-        # Automatyczne sprawdzenie zmian w tle przy starcie/odświeżeniu strony w przeglądarce
+        # Sprawdzamy zmiany tylko raz przy starcie/odświeżeniu strony w tle
         sprawdz_i_odswiez_automatycznie()
         page.add(ekran_glowny)
         wczytaj_i_wyswietl_tydzien()
