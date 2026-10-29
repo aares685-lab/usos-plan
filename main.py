@@ -174,7 +174,7 @@ def main(page: ft.Page):
         ekran_szczegolow = ft.Column([
             ft.Row([
                 ft.Text("Szczegóły zajęć", size=18, weight="bold"),
-                ft.Button("Powrót", on_click=powrot_do_planu)
+                ft.ElevatedButton("Powrót", on_click=powrot_do_planu)
             ], alignment="spaceBetween", width=520),
             ft.Container(height=10),
             ft.Container(
@@ -334,7 +334,7 @@ def main(page: ft.Page):
             zawartosc_osi_czasu.controls.append(ft.Divider(height=5, color="transparent"))
 
             START_MINUTY = 7 * 60
-            WYSOKOSC_OSI = 870  # Od 7:00 do 21:30
+            WYSOKOSC_OSI = 870
             PIKSELI_NA_MINUTE = 1.0
 
             kolumny_dni_stacks = []
@@ -466,8 +466,8 @@ def main(page: ft.Page):
         powiadomienia_lista.controls.clear()
         powiadomienia_lista.controls.append(
             ft.Row([
-                ft.Button("➕ Test", on_click=dodaj_testowe_powiadomienie),
-                ft.Button("🗑️ Wyczyść", on_click=wyczysc_powiadomienia)
+                ft.ElevatedButton("➕ Test", on_click=dodaj_testowe_powiadomienie),
+                ft.ElevatedButton("🗑️ Wyczyść", on_click=wyczysc_powiadomienia)
             ], alignment="spaceBetween")
         )
 
@@ -519,7 +519,7 @@ def main(page: ft.Page):
             ft.Column([
                 ft.Row([
                     ft.Text("Powiadomienia o zmianach", size=18, weight="bold"),
-                    ft.Button("Powrót", on_click=powrot_do_planu_z_powiadomien)
+                    ft.ElevatedButton("Powrót", on_click=powrot_do_planu_z_powiadomien)
                 ], alignment="spaceBetween", width=520),
                 ft.Container(height=10),
                 ft.Container(
@@ -564,23 +564,23 @@ def main(page: ft.Page):
         ical_input,
         info_link,
         ft.Container(height=10),
-        ft.Button("Zapisz i pobierz plan", on_click=zapisz_i_przejdz)
+        ft.ElevatedButton("Zapisz i pobierz plan", on_click=zapisz_i_przejdz)
     ], alignment="center", horizontal_alignment="center", spacing=10)
 
     global ekran_glowny
     ekran_glowny = ft.Column([
         ft.Row([
-            ft.Button("🔄 Odśwież", on_click=odswiez_plan_klikniety),
-            ft.Button("🌙 / ☀️", on_click=przelacz_tryb_graficzny),
-            ft.Button("🔔", on_click=otworz_ekran_powiadomien)
+            ft.ElevatedButton("🔄 Odśwież", on_click=odswiez_plan_klikniety),
+            ft.ElevatedButton("🌙 / ☀️", on_click=przelacz_tryb_graficzny),
+            ft.ElevatedButton("🔔", on_click=otworz_ekran_powiadomien)
         ], alignment="spaceBetween", width=710),
 
         ft.Container(height=5),
 
         ft.Row([
-            ft.Button("◄", on_click=poprzedni_tydzien),
+            ft.ElevatedButton("◄", on_click=poprzedni_tydzien),
             tytul_tygodnia,
-            ft.Button("►", on_click=nastepny_tydzien),
+            ft.ElevatedButton("►", on_click=nastepny_tydzien),
         ], alignment="center", spacing=20, width=710),
 
         ft.Container(height=5),
@@ -603,6 +603,5 @@ def main(page: ft.Page):
         page.add(ekran_konfiguracji)
 
 if __name__ == "__main__":
-    import os
     port = int(os.environ.get("PORT", 8080))
     ft.app(target=main, view=ft.AppView.WEB_BROWSER, port=port)
