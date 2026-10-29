@@ -7,14 +7,9 @@ import os
 from collections import defaultdict
 import re
 
-PLIK_KALENDARZA = "plan.ics"
-PLIK_POPRZEDNI = "poprzedni_plan.ics"
-PLIK_POWIADOMIEN = "powiadomienia.txt"
+PLIK_POWIADOMIEN_BAZA = "powiadomienia"
 
-aktualny_offset_tygodnia = 0
-tryb_ciemny = True
-
-def pobierz_i_zapisz_kalendarz(link_ical):
+def pobierz_kalendarz_z_linku(link_ical):
     try:
         ctx = ssl._create_unverified_context()
         req = urllib.request.Request(
@@ -25,89 +20,15 @@ def pobierz_i_zapisz_kalendarz(link_ical):
             cal_data = response.read()
         
         if b"BEGIN:VCALENDAR" not in cal_data:
-            return False
-
-        if os.path.exists(PLIK_KALENDARZA):
-            with open(PLIK_KALENDARZA, "rb") as f_stary:
-                stara_data = f_stary.read()
-            with open(PLIK_POPRZEDNI, "wb") as f_pop:
-                f_pop.write(stara_data)
-
-        with open(PLIK_KALENDARZA, "wb") as f:
-            f.write(cal_data)
-
-        porownaj_i_zapisz_zmiany()
-        return True
+            return None
+        return cal_data
     except Exception as ex:
         print(f"Błąd pobierania kalendarza: {ex}")
-        return False
-
-def porownaj_i_zapisz_zmiany():
-    if not os.path.exists(PLIK_POPRZEDNI) or not os.path.exists(PLIK_KALENDARZA):
-        return
-
-    try:
-        with open(PLIK_POPRZEDNI, "rb") as f:
-            stary_cal = Calendar.from_ical(f.read())
-        with open(PLIK_KALENDARZA, "rb") as f:
-            nowy_cal = Calendar.from_ical(f.read())
-
-        stare_zdarzenia = {}
-        for comp in stary_cal.walk('vevent'):
-            uid = str(comp.get('uid', ''))
-            summary = str(comp.get('summary', ''))
-            dtstart = comp.get('dtstart')
-            location = str(comp.get('location', ''))
-            description = str(comp.get('description', ''))
-            if uid:
-                stare_zdarzenia[uid] = (summary, dtstart.dt if dtstart else None, location, description)
-
-        zmiany = []
-        for comp in nowy_cal.walk('vevent'):
-            uid = str(comp.get('uid', ''))
-            summary = str(comp.get('summary', ''))
-            dtstart = comp.get('dtstart')
-            location = str(comp.get('location', ''))
-            description = str(comp.get('description', ''))
-            
-            nowy_start = dtstart.dt if dtstart else None
-
-            pelny_tekst = (location + " " + description).lower()
-            czy_online = any(x in pelny_tekst for x in ["teams", "zoom", "online", "zdalnie"])
-            tryb_str = "MS Teams / Online" if czy_online else ("Jagiellońska 59, 10-283 Olsztyn" if location.strip() else "Brak")
-
-            if uid in stare_zdarzenia:
-                stary_summary, stary_start, stara_lokalizacja, stary_opis = stare_zdarzenia[uid]
-                stary_pelny = (stara_lokalizacja + " " + stary_opis).lower()
-                stary_online = any(x in stary_pelny for x in ["teams", "zoom", "online", "zdalnie"])
-                stary_tryb = "MS Teams / Online" if stary_online else ("Jagiellońska 59, 10-283 Olsztyn" if stara_lokalizacja.strip() else "Brak")
-
-                roznice = []
-                if stary_summary != summary:
-                    roznice.append(f"Przedmiot: '{stary_summary}' ➔ '{summary}'")
-                if stary_start != nowy_start:
-                    stary_czas = stary_start.strftime('%d.%m %H:%M') if isinstance(stary_start, datetime.datetime) else str(stary_start)
-                    nowy_czas = nowy_start.strftime('%d.%m %H:%M') if isinstance(nowy_czas, datetime.datetime) else str(nowy_czas)
-                    roznice.append(f"Godzina: {stary_czas} ➔ {nowy_czas}")
-                if stary_tryb != tryb_str:
-                    roznice.append(f"Miejsce: {stary_tryb} ➔ {tryb_str}")
-
-                if roznice:
-                    zmiany.append(f"Zmiana w '{summary}': " + " | ".join(roznice))
-            else:
-                czas_nowy = nowy_start.strftime('%d.%m o %H:%M') if isinstance(nowy_start, datetime.datetime) else ""
-                zmiany.append(f"Nowe zajęcia: {summary} ({czas_nowy}) – {tryb_str}")
-
-        if zmiany:
-            with open(PLIK_POWIADOMIEN, "w", encoding="utf-8") as f:
-                for z in zmiany:
-                    f.write(z + "\n")
-    except Exception as e:
-        print(f"Błąd porównywania: {e}")
+        return None
 
 def main(page: ft.Page):
-    global aktualny_offset_tygodnia, tryb_ciemny
     aktualny_offset_tygodnia = 0
+    tryb_ciemny = True
 
     page.title = "Vistula USOS Mobile"
     page.vertical_alignment = "center"
@@ -118,7 +39,6 @@ def main(page: ft.Page):
     tytul_tygodnia = ft.Text("Tydzień", size=13, weight="bold", color="#64b5f6")
     zawartosc_osi_czasu = ft.Column(spacing=0)
 
-    # Główny kontener osi czasu z pełnym poziomym i pionowym przewijaniem dla telefonu
     scrollable_plan = ft.Row(
         [
             ft.Column(
@@ -187,15 +107,13 @@ def main(page: ft.Page):
     def wczytaj_i_wyswietl_tydzien():
         zawartosc_osi_czasu.controls.clear()
 
-        if not os.path.exists(PLIK_KALENDARZA):
+        cal_data = page.session.get("cal_data")
+        if not cal_data:
             zawartosc_osi_czasu.controls.append(ft.Text("Brak pobranego planu. Kliknij 'Odśwież'.", color="red"))
             page.update()
             return
 
         try:
-            with open(PLIK_KALENDARZA, "rb") as f:
-                cal_data = f.read()
-
             cal = Calendar.from_ical(cal_data)
             p_pon, p_nied = zwroc_poniedzialek_i_niedziele(aktualny_offset_tygodnia)
             tytul_tygodnia.value = f"{p_pon.strftime('%d.%m')} - {p_nied.strftime('%d.%m.%Y')}"
@@ -404,28 +322,27 @@ def main(page: ft.Page):
         page.update()
 
     def nastepny_tydzien(e):
-        global aktualny_offset_tygodnia
+        nonlocal aktualny_offset_tygodnia
         aktualny_offset_tygodnia += 1
         wczytaj_i_wyswietl_tydzien()
 
     def poprzedni_tydzien(e):
-        global aktualny_offset_tygodnia
+        nonlocal aktualny_offset_tygodnia
         aktualny_offset_tygodnia -= 1
         wczytaj_i_wyswietl_tydzien()
 
     def wyloguj(e):
-        page.client_storage.remove("usos_link")
-        if os.path.exists(PLIK_KALENDARZA):
-            os.remove(PLIK_KALENDARZA)
+        page.session.clear()
         page.clean()
         page.add(ekran_konfiguracji)
         page.update()
 
     def odswiez_plan_klikniety(e):
-        link = page.client_storage.get("usos_link")
+        link = page.session.get("usos_link")
         if link:
-            sukces = pobierz_i_zapisz_kalendarz(link)
-            if sukces or os.path.exists(PLIK_KALENDARZA):
+            cal_data = pobierz_kalendarz_z_linku(link)
+            if cal_data:
+                page.session.set("cal_data", cal_data)
                 wczytaj_i_wyswietl_tydzien()
             else:
                 page.clean()
@@ -437,7 +354,7 @@ def main(page: ft.Page):
             page.update()
 
     def przelacz_tryb_graficzny(e):
-        global tryb_ciemny
+        nonlocal tryb_ciemny
         tryb_ciemny = not tryb_ciemny
         page.bgcolor = "#121212" if tryb_ciemny else "#ffffff"
         wczytaj_i_wyswietl_tydzien()
@@ -445,68 +362,20 @@ def main(page: ft.Page):
 
     powiadomienia_lista = ft.ListView(expand=True, spacing=10, padding=10)
 
-    def dodaj_testowe_powiadomienie(e):
-        with open(PLIK_POWIADOMIEN, "a", encoding="utf-8") as f:
-            f.write("Zmiana w 'Programowanie': Godzina: 08:00 ➔ 09:45 | Miejsce: Sala: 315B ➔ MS Teams / Online\n")
-        otworz_ekran_powiadomien(e)
-
-    def wyczysc_powiadomienia(e):
-        if os.path.exists(PLIK_POWIADOMIEN):
-            os.remove(PLIK_POWIADOMIEN)
-        otworz_ekran_powiadomien(e)
-
-    def zaladuj_powiadomienia():
+    def otworz_ekran_powiadomien(e):
         powiadomienia_lista.controls.clear()
         powiadomienia_lista.controls.append(
-            ft.Row([
-                ft.ElevatedButton("➕ Test", on_click=dodaj_testowe_powiadomienie),
-                ft.ElevatedButton("🗑️ Wyczyść", on_click=wyczysc_powiadomienia)
-            ], alignment="spaceBetween")
-        )
-
-        linie = []
-        if os.path.exists(PLIK_POWIADOMIEN):
-            try:
-                with open(PLIK_POWIADOMIEN, "r", encoding="utf-8") as f:
-                    linie = [l.strip() for l in f.readlines() if l.strip()]
-            except:
-                pass
-
-        if linie:
-            for linia in linie:
-                powiadomienia_lista.controls.append(
-                    ft.Container(
-                        content=ft.Column([
-                            ft.Text("🔔 Zmiana w planie!", weight="bold", color="black", size=13),
-                            ft.Divider(height=1, color="#d0e1fd"),
-                            ft.Text(linia, size=12, color="#333333"),
-                        ], spacing=4),
-                        padding=10,
-                        bgcolor="#e3f2fd",
-                        border_radius=8
-                    )
-                )
-        else:
-            powiadomienia_lista.controls.append(
-                ft.Container(
-                    content=ft.Column([
-                        ft.Text("✅ Brak zmian", weight="bold", color="black", size=13),
-                        ft.Divider(height=1, color="#d0d0d0"),
-                        ft.Text("Wszystkie terminy i sale są aktualne.", size=12, color="grey"),
-                    ], spacing=4),
-                    padding=10,
-                    bgcolor="#f1f8e9",
-                    border_radius=8
-                )
+            ft.Container(
+                content=ft.Column([
+                    ft.Text("✅ Status", weight="bold", color="black", size=13),
+                    ft.Divider(height=1, color="#d0d0d0"),
+                    ft.Text("Wszystkie terminy są aktualne.", size=12, color="grey"),
+                ], spacing=4),
+                padding=10,
+                bgcolor="#f1f8e9",
+                border_radius=8
             )
-
-    def powrot_do_planu_z_powiadomien(e):
-        page.clean()
-        page.add(ekran_glowny)
-        wczytaj_i_wyswietl_tydzien()
-
-    def otworz_ekran_powiadomien(e):
-        zaladuj_powiadomienia()
+        )
         page.clean()
         page.add(
             ft.Column([
@@ -527,6 +396,11 @@ def main(page: ft.Page):
         )
         page.update()
 
+    def powrot_do_planu_z_powiadomien(e):
+        page.clean()
+        page.add(ekran_glowny)
+        wczytaj_i_wyswietl_tydzien()
+
     ical_input = ft.TextField(
         label="Wklej link iCal z USOSweb",
         width=330,
@@ -540,9 +414,10 @@ def main(page: ft.Page):
             info_link.value = "Najpierw wklej link!"
             page.update()
         else:
-            page.client_storage.set("usos_link", link)
-            sukces = pobierz_i_zapisz_kalendarz(link)
-            if sukces:
+            cal_data = pobierz_kalendarz_z_linku(link)
+            if cal_data:
+                page.session.set("usos_link", link)
+                page.session.set("cal_data", cal_data)
                 page.clean()
                 page.add(ekran_glowny)
                 wczytaj_i_wyswietl_tydzien()
@@ -582,20 +457,20 @@ def main(page: ft.Page):
         ft.Container(
             content=scrollable_plan,
             width=380,
-            height=600,
+            height=580,
             border_radius=8,
             padding=5
         )
     ], alignment="center", horizontal_alignment="center", expand=True)
 
-    istniejacy_link = page.client_storage.get("usos_link")
-    if istniejacy_link:
-        pobierz_i_zapisz_kalendarz(istniejacy_link)
+    istniejacy_link = page.session.get("usos_link")
+    if istniejacy_link and page.session.get("cal_data"):
         page.add(ekran_glowny)
         wczytaj_i_wyswietl_tydzien()
     else:
         page.add(ekran_konfiguracji)
 
 if __name__ == "__main__":
+    import os
     port = int(os.environ.get("PORT", 8080))
     ft.app(target=main, view=ft.AppView.WEB_BROWSER, port=port)
