@@ -374,23 +374,7 @@ def main(page: ft.Page):
         
         page.update()
 
-    def nastepny_tydzien(e):
-        nonlocal aktualny_offset_tygodnia
-        aktualny_offset_tygodnia += 1
-        wczytaj_i_wyswietl_tydzien()
-
-    def poprzedni_tydzien(e):
-        nonlocal aktualny_offset_tygodnia
-        aktualny_offset_tygodnia -= 1
-        wczytaj_i_wyswietl_tydzien()
-
-    def wyloguj(e):
-        page.session.clear()
-        page.clean()
-        page.add(ekran_konfiguracji)
-        page.update()
-
-    def odswiez_plan_klikniety(e):
+    def sprawdz_i_odswiez_automatycznie():
         link = page.session.get("usos_link")
         if link:
             nowa_data = pobierz_kalendarz_z_linku(link)
@@ -401,17 +385,29 @@ def main(page: ft.Page):
                     if zmiany:
                         istniejace_pow = page.session.get("powiadomienia", [])
                         page.session.set("powiadomienia", istniejace_pow + zmiany)
-
                 page.session.set("cal_data", nowa_data)
-                wczytaj_i_wyswietl_tydzien()
-            else:
-                page.clean()
-                page.add(ekran_konfiguracji)
-                page.update()
-        else:
-            page.clean()
-            page.add(ekran_konfiguracji)
-            page.update()
+
+    def nastepny_tydzien(e):
+        nonlocal aktualny_offset_tygodnia
+        aktualny_offset_tygodnia += 1
+        sprawdz_i_odswiez_automatycznie()
+        wczytaj_i_wyswietl_tydzien()
+
+    def poprzedni_tydzien(e):
+        nonlocal aktualny_offset_tygodnia
+        aktualny_offset_tygodnia -= 1
+        sprawdz_i_odswiez_automatycznie()
+        wczytaj_i_wyswietl_tydzien()
+
+    def wyloguj(e):
+        page.session.clear()
+        page.clean()
+        page.add(ekran_konfiguracji)
+        page.update()
+
+    def odswiez_plan_klikniety(e):
+        sprawdz_i_odswiez_automatycznie()
+        wczytaj_i_wyswietl_tydzien()
 
     def przelacz_tryb_graficzny(e):
         nonlocal tryb_ciemny
@@ -560,6 +556,8 @@ def main(page: ft.Page):
 
     istniejacy_link = page.session.get("usos_link")
     if istniejacy_link and page.session.get("cal_data"):
+        # Automatyczne sprawdzenie zmian w tle przy starcie/odświeżeniu strony w przeglądarce
+        sprawdz_i_odswiez_automatycznie()
         page.add(ekran_glowny)
         wczytaj_i_wyswietl_tydzien()
     else:
