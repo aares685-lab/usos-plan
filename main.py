@@ -105,6 +105,12 @@ def main(page: ft.Page):
         expand=True
     )
 
+    def powrot_do_planu(e):
+        page.clean()
+        page.add(ekran_glowny)
+        wczytaj_i_wyswietl_tydzien()
+        page.update()
+
     def pokaz_szczegoly_zajec(zajecie):
         elementy_szczegolow = [
             ft.Text(zajecie["summary"], size=16, weight="bold", color="#64b5f6"),
@@ -127,23 +133,23 @@ def main(page: ft.Page):
             ft.Row([ft.Text("⏰", size=14), ft.Text(f"Godzina: {zajecie['g_start']} – {zajecie['g_koniec']}", size=13, weight="bold", color="white" if tryb_ciemny else "black")], spacing=8),
         ])
 
-        dlg = ft.AlertDialog(
-            title=ft.Text("Szczegóły zajęć", size=18, weight="bold"),
-            content=ft.Container(
-                content=ft.Column(elementy_szczegolow, spacing=6, tight=True),
-                width=320,
-                padding=10
-            ),
-            actions=[
-                ft.ElevatedButton("Zamknij", on_click=lambda e: zamknij_dialog(dlg))
-            ]
-        )
-        page.dialog = dlg
-        dlg.open = True
-        page.update()
+        ekran_szczegolow = ft.Column([
+            ft.Row([
+                ft.Text("Szczegóły zajęć", size=18, weight="bold"),
+                ft.ElevatedButton("Powrót", on_click=powrot_do_planu)
+            ], alignment="spaceBetween", width=380),
+            ft.Container(height=10),
+            ft.Container(
+                content=ft.Column(elementy_szczegolow, spacing=6),
+                width=380,
+                bgcolor="#1e1e1e" if tryb_ciemny else "#fafafa",
+                border_radius=10,
+                padding=20
+            )
+        ], alignment="center", horizontal_alignment="center")
 
-    def zamknij_dialog(dlg):
-        dlg.open = False
+        page.clean()
+        page.add(ekran_szczegolow)
         page.update()
 
     def zwroc_poniedzialek_i_niedziele(offset):
@@ -419,25 +425,20 @@ def main(page: ft.Page):
         wczytaj_i_wyswietl_tydzien()
         page.update()
 
+    # Ekran powiadomień jako osobny dedykowany widok (100% niezawodny na telefonach)
     def otworz_ekran_powiadomien(e):
         powiadomienia_lista = ft.ListView(expand=True, spacing=10, padding=10)
-        
-        dlg_pow = ft.AlertDialog()
 
         def dodaj_testowe(ev):
             istniejace_pow = page.session.get("powiadomienia", [])
             istniejace_pow.append("Zmiana testowa: Sala 105 ➔ MS Teams / Online")
             page.session.set("powiadomienia", istniejace_pow)
             page.client_storage.set("powiadomienia", json.dumps(istniejace_pow))
-            dlg_pow.open = False
-            page.update()
             otworz_ekran_powiadomien(ev)
 
         def wyczysc_pow(ev):
             page.session.set("powiadomienia", [])
             page.client_storage.set("powiadomienia", json.dumps([]))
-            dlg_pow.open = False
-            page.update()
             otworz_ekran_powiadomien(ev)
 
         powiadomienia_lista.controls.append(
@@ -476,19 +477,24 @@ def main(page: ft.Page):
                 )
             )
 
-        dlg_pow.title = ft.Text("Powiadomienia o zmianach", size=16, weight="bold")
-        dlg_pow.content = ft.Container(
-            content=powiadomienia_lista,
-            width=320,
-            height=380,
-            padding=5
-        )
-        dlg_pow.actions = [
-            ft.ElevatedButton("Zamknij", on_click=lambda ev: (setattr(dlg_pow, 'open', False), page.update()))
-        ]
+        ekran_pow = ft.Column([
+            ft.Row([
+                ft.Text("Powiadomienia o zmianach", size=18, weight="bold"),
+                ft.ElevatedButton("Powrót", on_click=powrot_do_planu)
+            ], alignment="spaceBetween", width=380),
+            ft.Container(height=10),
+            ft.Container(
+                content=powiadomienia_lista,
+                width=380,
+                height=450,
+                bgcolor="#1e1e1e" if tryb_ciemny else "#fafafa",
+                border_radius=10,
+                padding=5
+            )
+        ], alignment="center", horizontal_alignment="center")
 
-        page.dialog = dlg_pow
-        dlg_pow.open = True
+        page.clean()
+        page.add(ekran_pow)
         page.update()
 
     ical_input = ft.TextField(
