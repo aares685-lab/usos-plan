@@ -138,10 +138,12 @@ def main(page: ft.Page):
                 ft.ElevatedButton("Zamknij", on_click=lambda e: zamknij_dialog(dlg))
             ]
         )
-        page.open(dlg)
+        page.dialog = dlg
+        dlg.open = True
+        page.update()
 
     def zamknij_dialog(dlg):
-        page.close(dlg)
+        dlg.open = False
         page.update()
 
     def zwroc_poniedzialek_i_niedziele(offset):
@@ -420,18 +422,22 @@ def main(page: ft.Page):
     def otworz_ekran_powiadomien(e):
         powiadomienia_lista = ft.ListView(expand=True, spacing=10, padding=10)
         
+        dlg_pow = ft.AlertDialog()
+
         def dodaj_testowe(ev):
             istniejace_pow = page.session.get("powiadomienia", [])
             istniejace_pow.append("Zmiana testowa: Sala 105 ➔ MS Teams / Online")
             page.session.set("powiadomienia", istniejace_pow)
             page.client_storage.set("powiadomienia", json.dumps(istniejace_pow))
-            page.close(dlg_pow)
+            dlg_pow.open = False
+            page.update()
             otworz_ekran_powiadomien(ev)
 
         def wyczysc_pow(ev):
             page.session.set("powiadomienia", [])
             page.client_storage.set("powiadomienia", json.dumps([]))
-            page.close(dlg_pow)
+            dlg_pow.open = False
+            page.update()
             otworz_ekran_powiadomien(ev)
 
         powiadomienia_lista.controls.append(
@@ -470,19 +476,20 @@ def main(page: ft.Page):
                 )
             )
 
-        dlg_pow = ft.AlertDialog(
-            title=ft.Text("Powiadomienia o zmianach", size=16, weight="bold"),
-            content=ft.Container(
-                content=powiadomienia_lista,
-                width=320,
-                height=380,
-                padding=5
-            ),
-            actions=[
-                ft.ElevatedButton("Zamknij", on_click=lambda ev: page.close(dlg_pow))
-            ]
+        dlg_pow.title = ft.Text("Powiadomienia o zmianach", size=16, weight="bold")
+        dlg_pow.content = ft.Container(
+            content=powiadomienia_lista,
+            width=320,
+            height=380,
+            padding=5
         )
-        page.open(dlg_pow)
+        dlg_pow.actions = [
+            ft.ElevatedButton("Zamknij", on_click=lambda ev: (setattr(dlg_pow, 'open', False), page.update()))
+        ]
+
+        page.dialog = dlg_pow
+        dlg_pow.open = True
+        page.update()
 
     ical_input = ft.TextField(
         label="Wklej link iCal z USOSweb",
