@@ -427,7 +427,6 @@ def main(page: ft.Page):
         wczytaj_i_wyswietl_tydzien()
         page.update()
 
-    # Ekran powiadomień z pełnym zabezpieczeniem listy
     def otworz_ekran_powiadomien(e):
         powiadomienia_lista = ft.ListView(expand=True, spacing=10, padding=10)
 
@@ -560,12 +559,13 @@ def main(page: ft.Page):
 
         ft.Container(height=5),
 
+        # Skrócony napis "🔔 Powiadomienia" do "🔔 Powiad." oraz zmniejszony odstęp, żeby wszystko się mieściło
         ft.Row([
             ft.ElevatedButton("🔄", on_click=odswiez_plan_klikniety, tooltip="Odśwież"),
             ft.ElevatedButton("🌙/☀️", on_click=przelacz_tryb_graficzny),
-            ft.ElevatedButton("🔔 Powiadomienia", on_click=otworz_ekran_powiadomien),
+            ft.ElevatedButton("🔔 Powiad.", on_click=otworz_ekran_powiadomien),
             ft.ElevatedButton("🚪 Wyloguj", on_click=wyloguj, color="red")
-        ], alignment="spaceBetween", width=380)
+        ], alignment="spaceBetween", width=380, spacing=5)
     ], alignment="center", horizontal_alignment="center", expand=True)
 
     # Inicjalizacja przy starcie z pamięci przeglądarki
