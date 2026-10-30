@@ -65,7 +65,7 @@ def porownaj_kalendarze(stara_data, nowa_data):
                     roznice.append(f"Przedmiot: '{stary_summary}' ➔ '{summary}'")
                 if stary_start != nowy_start:
                     stary_czas = stary_start.strftime('%d.%m %H:%M') if isinstance(stary_start, datetime.datetime) else str(stary_start)
-                    nowy_czas = nowy_start.strftime('%d.%m %H:%M') if isinstance(nowy_start, datetime.datetime) else str(nowy_czas)
+                    nowy_czas = nowy_start.strftime('%d.%m %H:%M') if isinstance(nowy_czas, datetime.datetime) else str(nowy_czas)
                     roznice.append(f"Godzina: {stary_czas} ➔ {nowy_czas}")
                 if stary_tryb != tryb_str:
                     roznice.append(f"Miejsce: {stary_tryb} ➔ {tryb_str}")
@@ -93,11 +93,13 @@ def main(page: ft.Page):
     tytul_tygodnia = ft.Text("Tydzień", size=13, weight="bold", color="#64b5f6")
     zawartosc_osi_czasu = ft.Column(spacing=0)
 
+    # Dwukierunkowe przewijanie (pion i poziom)
     scrollable_plan = ft.Row(
         [
             ft.Column(
                 [zawartosc_osi_czasu],
                 scroll=ft.ScrollMode.AUTO,
+                expand=True
             )
         ],
         scroll=ft.ScrollMode.AUTO,
@@ -529,7 +531,7 @@ def main(page: ft.Page):
 
     ekran_konfiguracji = ft.Column([
         ft.Text("Vistula USOS - Konfiguracja", size=18, weight="bold"),
-        ft.Text("Wklej swój link iCal (prywatny):", size=12, color="grey"),
+        ft.Text("Wklej swój link iCal:", size=12, color="grey"),
         ft.Container(height=10),
         ical_input,
         info_link,
@@ -565,10 +567,9 @@ def main(page: ft.Page):
         ], alignment="spaceBetween", width=380)
     ], alignment="center", horizontal_alignment="center", expand=True)
 
-    # Inicjalizacja przy starcie z pamięci przeglądarki
+    # Inicjalizacja przy starcie
     zapisany_link = page.client_storage.get("usos_link")
     
-    # Odczyt zapisanych powiadomień
     zapisane_pow = page.client_storage.get("powiadomienia")
     if zapisane_pow:
         try:
@@ -590,6 +591,4 @@ def main(page: ft.Page):
         page.add(ekran_konfiguracji)
 
 if __name__ == "__main__":
-    import os
-    port = int(os.environ.get("PORT", 8080))
-    ft.app(target=main, view=ft.AppView.WEB_BROWSER, port=port)
+    ft.run(main)
