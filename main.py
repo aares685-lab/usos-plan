@@ -5,6 +5,7 @@ from icalendar import Calendar
 import datetime
 import os
 from collections import defaultdict
+import json
 import re
 
 def pobierz_kalendarz_z_linku(link_ical):
@@ -64,7 +65,7 @@ def porownaj_kalendarze(stara_data, nowa_data):
                     roznice.append(f"Przedmiot: '{stary_summary}' ➔ '{summary}'")
                 if stary_start != nowy_start:
                     stary_czas = stary_start.strftime('%d.%m %H:%M') if isinstance(stary_start, datetime.datetime) else str(stary_start)
-                    nowy_czas = nowy_start.strftime('%d.%m %H:%M') if isinstance(nowy_czas, datetime.datetime) else str(nowy_czas)
+                    nowy_czas = nowy_start.strftime('%d.%m %H:%M') if isinstance(nowy_start, datetime.datetime) else str(nowy_czas)
                     roznice.append(f"Godzina: {stary_czas} ➔ {nowy_czas}")
                 if stary_tryb != tryb_str:
                     roznice.append(f"Miejsce: {stary_tryb} ➔ {tryb_str}")
@@ -401,7 +402,9 @@ def main(page: ft.Page):
                     zmiany = porownaj_kalendarze(stara_data, nowa_data)
                     if zmiany:
                         istniejace_pow = page.session.get("powiadomienia", [])
-                        page.session.set("powiadomienia", istniejace_pow + zmiany)
+                        nowa_lista_pow = istniejace_pow + zmiany
+                        page.session.set("powiadomienia", nowa_lista_pow)
+                        page.client_storage.set("powiadomienia", json.dumps(nowa_lista_pow))
 
                 page.session.set("cal_data", nowa_data)
                 wczytaj_i_wyswietl_tydzien()
@@ -427,10 +430,12 @@ def main(page: ft.Page):
         istniejace_pow = page.session.get("powiadomienia", [])
         istniejace_pow.append("Zmiana testowa: Sala 105 ➔ MS Teams / Online")
         page.session.set("powiadomienia", istniejace_pow)
+        page.client_storage.set("powiadomienia", json.dumps(istniejace_pow))
         otworz_ekran_powiadomien(e)
 
     def wyczysc_powiadomienia(e):
         page.session.set("powiadomienia", [])
+        page.client_storage.set("powiadomienia", json.dumps([]))
         otworz_ekran_powiadomien(e)
 
     def otworz_ekran_powiadomien(e):
@@ -514,6 +519,7 @@ def main(page: ft.Page):
                 page.client_storage.set("usos_link", link)
                 page.session.set("cal_data", cal_data)
                 page.session.set("powiadomienia", [])
+                page.client_storage.set("powiadomienia", json.dumps([]))
                 page.clean()
                 page.add(ekran_glowny)
                 wczytaj_i_wyswietl_tydzien()
@@ -559,8 +565,19 @@ def main(page: ft.Page):
         ], alignment="spaceBetween", width=380)
     ], alignment="center", horizontal_alignment="center", expand=True)
 
-    # Automatyczne logowanie przy starcie z zapisanego linku w pamięci przeglądarki
+    # Inicjalizacja przy starcie z pamięci przeglądarki
     zapisany_link = page.client_storage.get("usos_link")
+    
+    # Odczyt zapisanych powiadomień
+    zapisane_pow = page.client_storage.get("powiadomienia")
+    if zapisane_pow:
+        try:
+            page.session.set("powiadomienia", json.loads(zapisane_pow))
+        except:
+            page.session.set("powiadomienia", [])
+    else:
+        page.session.set("powiadomienia", [])
+
     if zapisany_link:
         cal_data = pobierz_kalendarz_z_linku(zapisany_link)
         if cal_data:
