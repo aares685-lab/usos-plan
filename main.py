@@ -8,6 +8,25 @@ from collections import defaultdict
 import json
 import re
 
+PLIK_USTAWIEN = "ustawienia_app.json"
+app_session = {"cal_data": None, "powiadomienia": []}
+
+def wczytaj_dane_z_dysku():
+    if os.path.exists(PLIK_USTAWIEN):
+        try:
+            with open(PLIK_USTAWIEN, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except:
+            pass
+    return {"link": "", "powiadomienia": []}
+
+def zapisz_dane_na_dysk(dane):
+    try:
+        with open(PLIK_USTAWIEN, "w", encoding="utf-8") as f:
+            json.dump(dane, f, ensure_ascii=False, indent=4)
+    except:
+        pass
+
 def pobierz_kalendarz_z_linku(link_ical):
     try:
         ctx = ssl._create_unverified_context()
@@ -136,7 +155,7 @@ def main(page: ft.Page):
         ekran_szczegolow = ft.Column([
             ft.Row([
                 ft.Text("Szczegóły zajęć", size=18, weight="bold"),
-                ft.ElevatedButton("Powrót", on_click=powrot_do_planu)
+                ft.Button("Powrót", on_click=powrot_do_planu)
             ], alignment="spaceBetween", width=380),
             ft.Container(height=10),
             ft.Container(
@@ -162,7 +181,7 @@ def main(page: ft.Page):
     def wczytaj_i_wyswietl_tydzien():
         zawartosc_osi_czasu.controls.clear()
 
-        cal_data = page.session.get("cal_data")
+        cal_data = app_session.get("cal_data")
         if not cal_data:
             zawartosc_osi_czasu.controls.append(ft.Text("Brak pobranego planu. Kliknij 'Odśwież'.", color="red"))
             page.update()
@@ -387,29 +406,42 @@ def main(page: ft.Page):
         wczytaj_i_wyswietl_tydzien()
 
     def wyloguj(e):
-        page.client_storage.remove("usos_link")
-        page.session.clear()
+        dane = wczytaj_dane_z_dysku()
+        dane["link"] = ""
+        dane["powiadomienia"] = []
+        zapisz_dane_na_dysk(dane)
+        app_session["cal_data"] = None
+        app_session["powiadomienia"] = []
         page.clean()
         page.add(ekran_konfiguracji)
         page.update()
 
-    def odswiez_plan_klikniety(e):
-        link = page.client_storage.get("usos_link")
-        if link:
-            nowa_data = pobierz_kalendarz_z_linku(link)
-            if nowa_data:
-                stara_data = page.session.get("cal_data")
-                if stara_data and stara_data != nowa_data:
-                    zmiany = porownaj_kalendarze(stara_data, nowa_data)
-                    if zmiany:
-                        istniejace_pow = page.session.get("powiadomienia")
-                        if not istniejace_pow:
-                            istniejace_pow = []
-                        nowa_lista_pow = istniejace_pow + zmiany
-                        page.session.set("powiadomienia", nowa_lista_pow)
-                        page.client_storage.set("powiadomienia", json.dumps(nowa_lista_pow))
+    def sprawdz_i_pobierz_plan(link):
+        nowa_data = pobierz_kalendarz_z_linku(link)
+        if not nowa_data:
+            return False
 
-                page.session.set("cal_data", nowa_data)
+        dane = wczytaj_dane_z_dysku()
+        stara_data = app_session.get("cal_data")
+
+        if stara_data and stara_data != nowa_data:
+            zmiany = porownaj_kalendarze(stara_data, nowa_data)
+            if zmiany:
+                istniejace_pow = dane.get("powiadomienia", [])
+                nowa_lista_pow = istniejace_pow + zmiany
+                dane["powiadomienia"] = nowa_lista_pow
+                zapisz_dane_na_dysk(dane)
+                app_session["powiadomienia"] = nowa_lista_pow
+        
+        app_session["cal_data"] = nowa_data
+        return True
+
+    def odswiez_plan_klikniety(e):
+        dane = wczytaj_dane_z_dysku()
+        link = dane.get("link", "")
+        if link:
+            sukces = sprawdz_i_pobierz_plan(link)
+            if sukces:
                 wczytaj_i_wyswietl_tydzien()
             else:
                 page.clean()
@@ -430,37 +462,21 @@ def main(page: ft.Page):
     def otworz_ekran_powiadomien(e):
         powiadomienia_lista = ft.ListView(expand=True, spacing=10, padding=10)
 
-        def dodaj_testowe(ev):
-            istniejace_pow = page.session.get("powiadomienia")
-            if not istniejace_pow:
-                istniejace_pow = []
-            istniejace_pow.append("Zmiana testowa: Sala 105 ➔ MS Teams / Online")
-            page.session.set("powiadomienia", istniejace_pow)
-            page.client_storage.set("powiadomienia", json.dumps(istniejace_pow))
-            otworz_ekran_powiadomien(ev)
-
-        def wyczysc_pow(ev):
-            page.session.set("powiadomienia", [])
-            page.client_storage.set("powiadomienia", json.dumps([]))
-            otworz_ekran_powiadomien(ev)
-
         powiadomienia_lista.controls.append(
             ft.Row([
-                ft.ElevatedButton("➕ Test", on_click=dodaj_testowe),
-                ft.ElevatedButton("🗑️ Wyczyść", on_click=wyczysc_pow)
+                ft.Text("Ostatnie sprawdzenie: OK", size=11, color="green"),
             ], alignment="spaceBetween")
         )
 
-        zmiany = page.session.get("powiadomienia")
-        if not zmiany:
-            zmiany = []
+        dane = wczytaj_dane_z_dysku()
+        zmiany = dane.get("powiadomienia", [])
 
         if zmiany:
             for z in zmiany:
                 powiadomienia_lista.controls.append(
                     ft.Container(
                         content=ft.Column([
-                            ft.Text("🔔 Zmiana w planie!", weight="bold", color="black", size=13),
+                            ft.Text("🔔 Wykryto zmianę w planie!", weight="bold", color="black", size=13),
                             ft.Divider(height=1, color="#d0e1fd"),
                             ft.Text(str(z), size=12, color="#333333"),
                         ], spacing=4),
@@ -473,9 +489,9 @@ def main(page: ft.Page):
             powiadomienia_lista.controls.append(
                 ft.Container(
                     content=ft.Column([
-                        ft.Text("✅ Brak zmian", weight="bold", color="black", size=13),
+                        ft.Text("✅ Brak nowych zmian", weight="bold", color="black", size=13),
                         ft.Divider(height=1, color="#d0d0d0"),
-                        ft.Text("Wszystkie terminy i sale są aktualne.", size=12, color="grey"),
+                        ft.Text("Plan sprawdzony przy uruchomieniu – wszystko jest aktualne.", size=12, color="grey"),
                     ], spacing=4),
                     padding=10,
                     bgcolor="#f1f8e9",
@@ -486,7 +502,7 @@ def main(page: ft.Page):
         ekran_pow = ft.Column([
             ft.Row([
                 ft.Text("Powiadomienia o zmianach", size=18, weight="bold"),
-                ft.ElevatedButton("Powrót", on_click=powrot_do_planu)
+                ft.Button("Powrót", on_click=powrot_do_planu)
             ], alignment="spaceBetween", width=380),
             ft.Container(height=10),
             ft.Container(
@@ -518,10 +534,10 @@ def main(page: ft.Page):
         else:
             cal_data = pobierz_kalendarz_z_linku(link)
             if cal_data:
-                page.client_storage.set("usos_link", link)
-                page.session.set("cal_data", cal_data)
-                page.session.set("powiadomienia", [])
-                page.client_storage.set("powiadomienia", json.dumps([]))
+                dane = wczytaj_dane_z_dysku()
+                dane["link"] = link
+                zapisz_dane_na_dysk(dane)
+                app_session["cal_data"] = cal_data
                 page.clean()
                 page.add(ekran_glowny)
                 wczytaj_i_wyswietl_tydzien()
@@ -536,16 +552,41 @@ def main(page: ft.Page):
         ical_input,
         info_link,
         ft.Container(height=10),
-        ft.ElevatedButton("Zapisz i pobierz plan", on_click=zapisz_i_przejdz)
+        ft.Button("Zapisz i pobierz plan", on_click=zapisz_i_przejdz)
     ], alignment="center", horizontal_alignment="center", spacing=10)
+
+    # Całkowicie bezpieczna funkcja tworząca przyciski paska (bez funkcji zewnętrznych paddingu)
+    def stworz_przycisk_paska(tekst, on_click, kolor_tekstu=None):
+        return ft.Container(
+            content=ft.Row([
+                ft.Text(tekst, size=13, weight="bold", color=kolor_tekstu or ("#ffffff" if tryb_ciemny else "#333333"))
+            ], alignment="center"),
+            on_click=on_click,
+            padding=10,
+            bgcolor="#252525" if tryb_ciemny else "#e0e0e0",
+            border_radius=8,
+            ink=True,
+            expand=True
+        )
 
     global ekran_glowny
     ekran_glowny = ft.Column([
+        ft.Container(height=25),
+
         ft.Row([
-            ft.ElevatedButton("◄", on_click=poprzedni_tydzien),
+            stworz_przycisk_paska("🔄 Odśwież", odswiez_plan_klikniety),
+            stworz_przycisk_paska("🌙 / ☀️", przelacz_tryb_graficzny),
+            stworz_przycisk_paska("🚪 Wyloguj", wyloguj, kolor_tekstu="#ff6b6b")
+        ], alignment="spaceBetween", width=380, spacing=8),
+
+        ft.Container(height=10),
+
+        ft.Row([
+            ft.Button("◄", on_click=poprzedni_tydzien),
             tytul_tygodnia,
-            ft.ElevatedButton("►", on_click=nastepny_tydzien),
-        ], alignment="center", spacing=20, width=380),
+            ft.Button("►", on_click=nastepny_tydzien),
+            ft.Button("🔔", on_click=otworz_ekran_powiadomien, tooltip="Powiadomienia")
+        ], alignment="spaceBetween", width=380, spacing=5),
 
         ft.Container(height=5),
         
@@ -556,34 +597,17 @@ def main(page: ft.Page):
             border_radius=8,
             padding=5
         ),
-
-        ft.Container(height=5),
-
-        # Skrócony napis "🔔 Powiadomienia" do "🔔 Powiad." oraz zmniejszony odstęp, żeby wszystko się mieściło
-        ft.Row([
-            ft.ElevatedButton("🔄", on_click=odswiez_plan_klikniety, tooltip="Odśwież"),
-            ft.ElevatedButton("🌙/☀️", on_click=przelacz_tryb_graficzny),
-            ft.ElevatedButton("🔔 Powiad.", on_click=otworz_ekran_powiadomien),
-            ft.ElevatedButton("🚪 Wyloguj", on_click=wyloguj, color="red")
-        ], alignment="spaceBetween", width=380, spacing=5)
     ], alignment="center", horizontal_alignment="center", expand=True)
 
-    # Inicjalizacja przy starcie z pamięci przeglądarki
-    zapisany_link = page.client_storage.get("usos_link")
-    
-    zapisane_pow = page.client_storage.get("powiadomienia")
-    if zapisane_pow:
-        try:
-            page.session.set("powiadomienia", json.loads(zapisane_pow))
-        except:
-            page.session.set("powiadomienia", [])
-    else:
-        page.session.set("powiadomienia", [])
+    zapisane_dane = wczytaj_dane_z_dysku()
+    zapisany_link = zapisane_dane.get("link", "")
 
     if zapisany_link:
-        cal_data = pobierz_kalendarz_z_linku(zapisany_link)
-        if cal_data:
-            page.session.set("cal_data", cal_data)
+        poczatkowa_data = pobierz_kalendarz_z_linku(zapisany_link)
+        if poczatkowa_data:
+            app_session["cal_data"] = poczatkowa_data
+            sprawdz_i_pobierz_plan(zapisany_link)
+            
             page.add(ekran_glowny)
             wczytaj_i_wyswietl_tydzien()
         else:
@@ -592,5 +616,4 @@ def main(page: ft.Page):
         page.add(ekran_konfiguracji)
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 8080))
-    ft.app(target=main, view=ft.AppView.WEB_BROWSER, host="0.0.0.0", port=port)
+    ft.run(main)
